@@ -1,0 +1,8 @@
+pyproject.toml
+beets_getlrc.egg-info/PKG-INFO
+beets_getlrc.egg-info/SOURCES.txt
+beets_getlrc.egg-info/dependency_links.txt
+beets_getlrc.egg-info/entry_points.txt
+beets_getlrc.egg-info/requires.txt
+beets_getlrc.egg-info/top_level.txt
+beetsplug/getlrc/__init__.py

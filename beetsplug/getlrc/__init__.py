@@ -92,6 +92,12 @@ class GetLrcPlugin(BeetsPlugin):
         except requests.Timeout:
             self._log.warning(f'Timeout after {retries} attempts: {audio_path_str}')
             return False
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                self._log.info(f'Not found on lrclib: {artist} - {title}')
+            else:
+                self._log.warning(f'Request failed for {audio_path_str}: {e}')
+            return False
         except requests.RequestException as e:
             self._log.warning(f'Request failed for {audio_path_str}: {e}')
             return False
@@ -129,9 +135,4 @@ class GetLrcPlugin(BeetsPlugin):
         if opts.album:
             for album in lib.albums(decargs(args)):
                 for item in album.items():
-                    self.fetch_lrc(item, force=force, pretend=pretend)
-                    time.sleep(self.config['delay'].get(float))
-        else:
-            for item in lib.items(decargs(args)):
-                self.fetch_lrc(item, force=force, pretend=pretend)
-                time.sleep(self.config['delay'].get(float))
+                    self.fetch_lrc(item, force=force,

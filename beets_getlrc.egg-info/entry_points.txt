@@ -1,0 +1,2 @@
+[beets.plugins]
+getlrc = beetsplug.getlrc:GetLrcPlugin

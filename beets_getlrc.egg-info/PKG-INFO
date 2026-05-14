@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: beets-getlrc
+Version: 0.1.1
+Summary: Fetch synced .lrc lyrics from lrclib.net for beets
+License: MIT
+Project-URL: Homepage, https://github.com/YOURNAME/beets-getlrc
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: beets>=2.0.0
+Requires-Dist: requests
