@@ -158,9 +158,14 @@ class GetLrcPlugin(BeetsPlugin):
         exts = self.config['sidecar_extensions'].get(list) or ['.lrc']
         self._sidecar_exts = [e if e.startswith('.') else f'.{e}' for e in exts]
 
+        # Queue to defer lyrics fetching until after import prompts
+        self._import_queue = []
+        self._import_queue_lock = threading.Lock()
+
         if self.config['auto']:
             self.register_listener('item_imported', self.item_imported)
             self.register_listener('album_imported', self.album_imported)
+            self.register_listener('import_task_done', self.import_task_done)
             # Move .lrc sidecar files when items are moved by beets
             self.register_listener('item_moved', self.item_moved)
             # Move .lrc sidecar files when albums (directories) are moved
@@ -247,7 +252,7 @@ class GetLrcPlugin(BeetsPlugin):
         for attempt in range(1, retries + 1):
             try:
                 return requests.get(url, timeout=timeout)
-            except (requests.Timeout, requests.ConnectionError) as e:
+            except (requests.Timeout, requests.ConnectionError, requests.RequestException) as e:
                 if attempt == retries:
                     raise
                 wait = 2 ** attempt
@@ -365,7 +370,7 @@ class GetLrcPlugin(BeetsPlugin):
                 response.raise_for_status()
                 data = response.json()
             except requests.Timeout:
-                self._log.warning(self._fmt('Timeout', item, _C.YELLOW))
+                self._print('Timeout', item, _C.YELLOW, progress=progress, progress_count=progress_count)
                 self._update_cache(item, 'timeout')
                 if stats:
                     stats.add('errors')
@@ -378,19 +383,25 @@ class GetLrcPlugin(BeetsPlugin):
                         stats.add('not_found')
                 else:
                     code = e.response.status_code if e.response else '?'
-                    self._log.warning(self._fmt(f'HTTP {code}', item, _C.RED))
+                    self._print(f'HTTP {code}', item, _C.RED, progress=progress, progress_count=progress_count)
                     self._update_cache(item, 'error')
                     if stats:
                         stats.add('errors')
                 return False
-            except requests.RequestException:
-                self._log.warning(self._fmt('Network error', item, _C.RED))
+            except requests.ConnectionError:
+                self._print('Connection error', item, _C.RED, progress=progress, progress_count=progress_count)
+                self._update_cache(item, 'error')
+                if stats:
+                    stats.add('errors')
+                return False
+            except requests.RequestException as e:
+                self._print(f'Request error: {e}', item, _C.RED, progress=progress, progress_count=progress_count)
                 self._update_cache(item, 'error')
                 if stats:
                     stats.add('errors')
                 return False
             except ValueError:
-                self._log.warning(self._fmt('Bad response', item, _C.RED))
+                self._print('Bad response', item, _C.RED, progress=progress, progress_count=progress_count)
                 self._update_cache(item, 'error')
                 if stats:
                     stats.add('errors')
@@ -453,13 +464,59 @@ class GetLrcPlugin(BeetsPlugin):
             pass
 
     def item_imported(self, lib, item):
-        self.fetch_lrc(item, force=self.config['overwrite'].get(bool))
-        time.sleep(self.config['delay'].get(float))
+        """Queue item for deferred LRC fetch (after import prompts complete)."""
+        with self._import_queue_lock:
+            self._import_queue.append(item)
 
     def album_imported(self, lib, album):
-        for item in album.items():
-            self.fetch_lrc(item, force=self.config['overwrite'].get(bool))
-            time.sleep(self.config['delay'].get(float))
+        """Queue album items for deferred LRC fetch (after import prompts complete)."""
+        with self._import_queue_lock:
+            for item in album.items():
+                self._import_queue.append(item)
+
+    def import_task_done(self, lib, task, **kwargs):
+        """Process queued items after an import task completes (all prompts done)."""
+        # Collect items queued during this task
+        with self._import_queue_lock:
+            items_to_process = list(self._import_queue)
+            self._import_queue.clear()
+        
+        if not items_to_process:
+            return
+        
+        force = self.config['overwrite'].get(bool)
+        delay = self.config['delay'].get(float)
+        workers = self.config['workers'].get(int)
+        
+        # Process queued items with same threading/sequencing logic
+        if workers > 1:
+            def run(item):
+                try:
+                    self.fetch_lrc(item, force=force, quiet=False)
+                    time.sleep(delay)
+                except Exception as e:
+                    self._log.error(f"Error fetching lyrics for {displayable_path(item.path)}: {e}")
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                try:
+                    list(executor.map(run, items_to_process, timeout=None))
+                except Exception as e:
+                    self._log.error(f"Critical error in import lyrics worker: {e}")
+        else:
+            for item in items_to_process:
+                try:
+                    self.fetch_lrc(item, force=force, quiet=False)
+                    time.sleep(delay)
+                except Exception as e:
+                    self._log.error(f"Error fetching lyrics for {displayable_path(item.path)}: {e}")
+
+    def import_defer_start(self, task, **kwargs):
+        """Process queued items after import task's choice prompt is done."""
+        # The import task will fire this event when it needs user input.
+        # We process all queued items in the next idle moment after prompts.
+        # However, since this can be called multiple times per import task,
+        # we only process if the queue is substantial and likely done growing.
+        pass  # Actual processing happens in import_task_done
 
     def item_moved(self, *args, **kwargs):
         """Move sidecar files when an item file is moved.
@@ -603,19 +660,31 @@ class GetLrcPlugin(BeetsPlugin):
                                  progress_count=count, quiet=quiet)
                     time.sleep(delay)
                 except Exception as e:
-                    self._log.error(f"Unhandled error for {displayable_path(item.path)}: {e}")
+                    # Ensure progress counter is incremented even on error
+                    if progress:
+                        progress.increment()
+                    self._log.error(f"Error processing {displayable_path(item.path)}: {e}")
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
-                executor.map(run, items)
+                # Use list() to consume all results and let exceptions propagate if critical
+                try:
+                    list(executor.map(run, items, timeout=None))
+                except Exception as e:
+                    self._log.error(f"Critical error in worker thread: {e}")
 
         # Sequential execution
         else:
             for item in items:
-                count = progress.increment() if progress else None
-                self.fetch_lrc(item, force=force, pretend=pretend,
-                             stats=stats, progress=progress,
-                             progress_count=count, quiet=quiet)
-                time.sleep(delay)
+                try:
+                    count = progress.increment() if progress else None
+                    self.fetch_lrc(item, force=force, pretend=pretend,
+                                 stats=stats, progress=progress,
+                                 progress_count=count, quiet=quiet)
+                    time.sleep(delay)
+                except Exception as e:
+                    self._log.error(f"Error processing {displayable_path(item.path)}: {e}")
+                    if progress:
+                        progress.increment()
 
         if progress:
             progress.finish()

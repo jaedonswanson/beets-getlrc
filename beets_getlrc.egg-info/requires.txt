@@ -1,2 +1,5 @@
 beets>=2.0.0
 requests
+
+[dev]
+pre-commit

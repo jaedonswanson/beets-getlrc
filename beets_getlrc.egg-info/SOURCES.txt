@@ -7,3 +7,4 @@ beets_getlrc.egg-info/entry_points.txt
 beets_getlrc.egg-info/requires.txt
 beets_getlrc.egg-info/top_level.txt
 beetsplug/getlrc/__init__.py
+tests/test_plain_lrc.py
