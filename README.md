@@ -38,6 +38,15 @@ Some digital audio players (like the Sony Walkman, HiBy R3, Shanling M0 Pro, Fii
 
 Beets already has a built-in `lyrics` plugin that fetches plain-text lyrics and stores them directly inside your library database. **beets-getlrc** fills a different gap: it fetches *synced* `.lrc` files from [lrclib.net](https://lrclib.net) and saves them as sidecar files directly alongside your FLAC or MP3 files.
 
+### Fallback Options
+
+If synced lyrics aren't available for a track, the plugin can optionally:
+
+- **Fall back to plain lyrics as `.lrc` files** — write unsynced lyrics to `.lrc` files so your DAP can still display them (though without timing)
+- **Store plain lyrics in the beets database** — save unsynced lyrics in your library so they're searchable and preserved
+
+These options let you build a more complete lyrics collection, even for tracks where lrclib.net doesn't have synced versions.
+
 ## Installation
 
 ### If you installed beets with pip:
@@ -61,19 +70,29 @@ adjust the options as desired:
 
 | Parameter | Default Value | Description |
 | :--- | :--- | :--- |
-| `auto` | `yes` | If it fetches lrc files automatically on import |
-| `overwrite` | `no` | If it looks to replace lrc files already existing files |
-| `timeout` | `30` | Seconds until timeout |
-| `retries` | `3` | How many times it retries |
-| `delay` | `0.5` | How long it waits before lookups (Seconds) |
-| `cache_results` | `yes` | Remember lookups in the beets database so it does not look for files its already checked|
-| `recheck_days` | `30` | How many days before retrying a song that it already looked for and cached |
-| `stats` | `yes` | Print a summary of the lrc files found |
-| `progress` | `yes` | Show per-track progress and progress bar in the command output |
-| `workers` | `1` | Use multiple threads for faster fetching; set higher for network-bound workloads |
+| `auto` | `yes` | Fetch lyrics automatically when importing new music (runs after all import prompts complete) |
+| `overwrite` | `no` | Replace `.lrc` files that already exist |
+| `timeout` | `30` | Seconds to wait before giving up on a single request |
+| `retries` | `3` | How many times to retry on timeout or network errors |
+| `delay` | `0.2` | Delay in seconds between requests (to be respectful to lrclib.net) |
+| `cache_results` | `yes` | Cache results in the beets database to avoid re-checking tracks |
+| `recheck_days` | `30` | Days before retrying cached "not found" results |
+| `fallback_to_plain` | `no` | Store plain (unsynced) lyrics in the beets database if synced ones unavailable |
+| `fallback_to_plain_lrc` | `no` | Write plain (unsynced) lyrics as `.lrc` files if synced ones unavailable |
+| `stats` | `yes` | Print a summary of results when done |
+| `progress` | `yes` | Show per-track progress and progress bar |
+| `workers` | `4` | Number of concurrent requests; increase for faster fetching on good networks |
 
 ## Usage
-Run it manually any time with the beet getlrc command:
+
+### Automatic (during import)
+
+When you import new music with `beet import`, the plugin automatically fetches lyrics in the background. It waits quietly until all import prompts are done, then starts fetching so your terminal stays clean.
+
+### Manual (on demand)
+
+Run it manually any time with the `beet getlrc` command:
+
 | Command                  | Description                                                           |
 | ------------------------ | --------------------------------------------------------------------- |
 | `beet getlrc`            | Fetch lyrics for **all** tracks in your library                       |
@@ -81,17 +100,25 @@ Run it manually any time with the beet getlrc command:
 | `beet getlrc -a beatles` | Fetch for albums matching "beatles"                                   |
 | `beet getlrc -f`         | Force overwrite existing `.lrc` files                                 |
 | `beet getlrc -p`         | Pretend mode — shows what *would* be fetched without writing anything |
+| `beet getlrc -q`         | Quiet mode — suppress per-track output and progress bar |
+| `beet getlrc -w 8`       | Use 8 worker threads for parallel fetching |
+| `beet getlrc --delay 1`  | Wait 1 second between requests |
 
-## Using the plugin
-### How it Works
-1. The plugin looks for the artist and other tags in the metadata
-2. it looks for the lyrics at lrclib.net
-3. if found, it adds them to the folder using the same name as the music file
-### Typical Workflow
-1. Import music with beets
-2. `beets-getlrc` automatically downloads synced lyrics
-3. Sync music to your DAP, Plexamp, or Navidrome
-4. Enjoy scrolling synced lyrics
+## How it Works
+
+1. **Query metadata** — Uses artist name and track title from your library tags
+2. **Search lrclib.net** — Looks for synced lyrics matching the metadata
+3. **Save as `.lrc`** — Writes synced lyrics as sidecar files next to your audio
+4. **Fallback options** — Optionally stores plain lyrics if synced ones aren't found
+5. **Cache results** — Remembers what was found to avoid re-checking
+6. **Handle errors** — Continues processing even if some requests timeout or fail
+
+## Typical Workflow
+
+1. Import music with `beet import` → plugin fetches quietly in background
+2. After import completes → you see a summary of what was found/created
+3. Sync music to your DAP, Plexamp, Navidrome, or other player
+4. Enjoy synced lyrics that scroll as songs play
 ### Example
 #### Code
 ```
@@ -108,7 +135,41 @@ getlrc: Created: Wet Leg - Wet Leg - Chaise Longue
 
 ## Requirements
 - beets 2.0.0 or newer
-- python 3.9 or later
-- internet
-## Notes
-- This only fetches synced lyrics, so if lrclib.net does not have them, then no lrc files will be created.
+- Python 3.9 or later
+- Internet connection
+
+## Features & Notes
+
+- **Resilient** — Handles network timeouts gracefully and continues processing. If a request times out, that track is logged and processing continues with the next one.
+- **Fast** — Uses multiple worker threads (configurable) for parallel requests, making large library fetches much quicker.
+- **Smart** — Caches results in the beets database so previously-checked tracks aren't re-queried every time you run the command.
+- **Customizable** — Configure fallback lyrics options, number of workers, retry behavior, delays, and more.
+- **Clean import** — During `beet import`, fetching happens silently after all user prompts are done, keeping your terminal uncluttered.
+- **Synced lyrics only by default** — If lrclib.net doesn't have synced lyrics for a track, no `.lrc` file is created (unless you enable a fallback option).
+
+## Fallback Examples
+
+### Store plain lyrics in database (if synced unavailable)
+```yaml
+plugins:
+  - getlrc
+getlrc:
+  fallback_to_plain: yes
+```
+
+### Write plain lyrics as `.lrc` files (if synced unavailable)
+```yaml
+plugins:
+  - getlrc
+getlrc:
+  fallback_to_plain_lrc: yes
+```
+
+### Both synced and plain fallback
+```yaml
+plugins:
+  - getlrc
+getlrc:
+  fallback_to_plain: yes
+  fallback_to_plain_lrc: yes
+```
