@@ -147,14 +147,24 @@ class GetLrcPlugin(BeetsPlugin):
             'recheck_days': 30,
             'stats': True,
             'fallback_to_plain': False,
+            'fallback_to_plain_lrc': False,
             'workers': 4,
             'progress': True,
             'output_dir': '',
+            'sidecar_extensions': ['.lrc'],
         })
+
+        # Populate sidecar extensions from config, ensuring all start with '.'
+        exts = self.config['sidecar_extensions'].get(list) or ['.lrc']
+        self._sidecar_exts = [e if e.startswith('.') else f'.{e}' for e in exts]
 
         if self.config['auto']:
             self.register_listener('item_imported', self.item_imported)
             self.register_listener('album_imported', self.album_imported)
+            # Move .lrc sidecar files when items are moved by beets
+            self.register_listener('item_moved', self.item_moved)
+            # Move .lrc sidecar files when albums (directories) are moved
+            self.register_listener('album_moved', self.album_moved)
 
     def _safe_name(self, val):
         """Sanitize a string for use in a filesystem path."""
@@ -406,7 +416,24 @@ class GetLrcPlugin(BeetsPlugin):
                         stats.add('errors')
                     return False
 
-            # 2. Plain lyrics fallback (store in beets db)
+            # 2. Plain lyrics fallback (write as .lrc file if configured)
+            if self.config['fallback_to_plain_lrc'].get(bool) and plain and plain not in (None, 'null', 'None'):
+                try:
+                    with open(syspath(lrc_path), 'w', encoding='utf-8') as f:
+                        f.write(plain)
+                    self._print('Created (plain lyrics)', item, _C.GREEN, progress=progress, progress_count=progress_count)
+                    self._update_cache(item, 'created')
+                    if stats:
+                        stats.add('created')
+                    return True
+                except OSError as e:
+                    self._log.error(self._fmt('Write failed (plain)', item, _C.RED) + f' ({e})')
+                    self._update_cache(item, 'error')
+                    if stats:
+                        stats.add('errors')
+                    return False
+
+            # 3. Plain lyrics fallback (store in beets db only if not writing as file)
             if self.config['fallback_to_plain'].get(bool) and plain and not item.lyrics:
                 item.lyrics = plain
                 item.store()
@@ -416,7 +443,7 @@ class GetLrcPlugin(BeetsPlugin):
                     stats.add('plain')
                 return True
 
-            # 3. Nothing available
+            # 4. Nothing available
             self._print('No synced lyrics', item, _C.RED, progress=progress, progress_count=progress_count)
             self._update_cache(item, 'no_synced')
             if stats:
@@ -433,6 +460,115 @@ class GetLrcPlugin(BeetsPlugin):
         for item in album.items():
             self.fetch_lrc(item, force=self.config['overwrite'].get(bool))
             time.sleep(self.config['delay'].get(float))
+
+    def item_moved(self, *args, **kwargs):
+        """Move sidecar files when an item file is moved.
+
+        Accepts either (lib, item, source, destination) or (item, source, destination)
+        or keyword form from beets: item=..., source=..., destination=... .
+        """
+        from pathlib import Path
+        import shutil
+
+        # Normalize parameters
+        if 'item' in kwargs and 'source' in kwargs and 'destination' in kwargs:
+            item = kwargs.get('item')
+            source = kwargs.get('source')
+            destination = kwargs.get('destination')
+        else:
+            if len(args) == 4:
+                _, item, source, destination = args
+            elif len(args) == 3:
+                item, source, destination = args
+            else:
+                self._log.error('item_moved: unexpected args')
+                return
+
+        try:
+            # Normalize to str paths (handle bytes from beets internals)
+            import os as _os
+            source_path = _os.fspath(source)
+            destination_path = _os.fspath(destination)
+            if isinstance(source_path, (bytes, bytearray)):
+                source_path = source_path.decode('utf-8', 'surrogateescape')
+            if isinstance(destination_path, (bytes, bytearray)):
+                destination_path = destination_path.decode('utf-8', 'surrogateescape')
+
+            exts = getattr(self, '_sidecar_exts', None)
+            if exts is None:
+                exts = ['.lrc']
+
+            for ext in exts:
+                old = Path(source_path).with_suffix(ext)
+                new = Path(destination_path).with_suffix(ext)
+                if old.exists():
+                    new.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(old), str(new))
+                    self._log.debug(self._fmt(f'Moved sidecar {ext}', item, _C.GREEN))
+        except Exception as e:
+            self._log.error(self._fmt(f'Failed moving sidecar: {e}', item, _C.RED))
+
+    def album_moved(self, *args, **kwargs):
+        """Move sidecar files under `source` to `destination` when an album dir moves.
+
+        Accepts either (lib, album, source, destination) or (album, source, destination)
+        or keyword form: album=..., source=..., destination=... .
+        """
+        from pathlib import Path
+        import shutil
+
+        # Normalize parameters
+        if 'album' in kwargs and 'source' in kwargs and 'destination' in kwargs:
+            album = kwargs.get('album')
+            source = kwargs.get('source')
+            destination = kwargs.get('destination')
+        else:
+            if len(args) == 4:
+                _, album, source, destination = args
+            elif len(args) == 3:
+                album, source, destination = args
+            else:
+                self._log.error('album_moved: unexpected args')
+                return
+
+        try:
+            # Normalize to str paths (handle bytes from beets internals)
+            import os as _os
+            src_path = _os.fspath(source)
+            dst_path = _os.fspath(destination)
+            if isinstance(src_path, (bytes, bytearray)):
+                src_path = src_path.decode('utf-8', 'surrogateescape')
+            if isinstance(dst_path, (bytes, bytearray)):
+                dst_path = dst_path.decode('utf-8', 'surrogateescape')
+
+            src_dir = Path(src_path)
+            dst_dir = Path(dst_path)
+
+            if not src_dir.exists():
+                return
+
+            exts = getattr(self, '_sidecar_exts', None)
+            if exts is None:
+                exts = ['.lrc']
+
+            for ext in exts:
+                for p in src_dir.rglob(f'*{ext}'):
+                    try:
+                        rel = p.relative_to(src_dir)
+                    except Exception:
+                        rel = p.name
+                    target = dst_dir.joinpath(rel)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(p), str(target))
+                    self._log.debug(f'Moved album sidecar {ext}: {p} -> {target}')
+        except Exception as e:
+            # Try get a representative item for logging
+            rep = None
+            try:
+                rep = album.items()[0]
+            except Exception:
+                rep = None
+            self._log.error(self._fmt(f'Failed moving album sidecars: {e}', rep, _C.RED))
 
     def command(self, lib, opts, args):
         force = opts.force or self.config['overwrite'].get(bool)

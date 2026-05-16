@@ -2,6 +2,36 @@
 
 A [beets](https://beets.io) plugin that downloads synced `.lrc` lyric files for your music library.
 
+## Quick Start
+
+Install:
+
+```bash
+pipx inject beets beets-getlrc
+```
+
+Enable the plugin:
+
+```yaml
+plugins:
+  - getlrc
+```
+
+Fetch synced lyrics:
+
+```bash
+beet getlrc
+```
+
+Your music files will end up like:
+
+```text
+Artist/
+└── Album/
+    ├── Song.flac
+    └── Song.lrc
+```
+
 ## What does this do?
 
 Some digital audio players (like the Sony Walkman, HiBy R3, Shanling M0 Pro, FiiO devices, etc.) can display **synced lyrics** — the kind that scroll line-by-line as the song plays. However, they usually require a separate `.lrc` file stored right next to each track.
@@ -52,10 +82,16 @@ Run it manually any time with the beet getlrc command:
 | `beet getlrc -f`         | Force overwrite existing `.lrc` files                                 |
 | `beet getlrc -p`         | Pretend mode — shows what *would* be fetched without writing anything |
 
-## How it Works
+## Using the plugin
+### How it Works
 1. The plugin looks for the artist and other tags in the metadata
 2. it looks for the lyrics at lrclib.net
 3. if found, it adds them to the folder using the same name as the music file
+### Typical Workflow
+1. Import music with beets
+2. `beets-getlrc` automatically downloads synced lyrics
+3. Sync music to your DAP, Plexamp, or Navidrome
+4. Enjoy scrolling synced lyrics
 ### Example
 #### Code
 ```
@@ -64,10 +100,11 @@ getlrc: No synced lyrics: Wet Leg - Wet Leg - Being in Love
 getlrc: Created: Wet Leg - Wet Leg - Chaise Longue
 ```
 #### Resulting Directory Structure
-text
+```text
 ├── Being in Love.flac
 ├── Chaise Longue.flac
-└── Chaise Longue.lrc      <-- Created by beets-getlrc
+└── Chaise Longue.lrc
+```
 
 ## Requirements
 - beets 2.0.0 or newer

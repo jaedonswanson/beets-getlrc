@@ -13,9 +13,21 @@ dependencies = [
     "beets>=2.0.0",
     "requests",
 ]
-
+keywords = [
+  "beets",
+  "music",
+  "lyrics",
+  "lrc",
+  "music-library",
+  "tagging",
+  "audio"
+]
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+]
 [project.urls]
-Homepage = "https://github.com/YOURNAME/beets-getlrc"
+Homepage = "https://github.com/jaedonswanson/beets-getlrc"
 
 [project.entry-points."beets.plugins"]
 getlrc = "beetsplug.getlrc:GetLrcPlugin"
