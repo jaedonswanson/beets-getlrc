@@ -7,12 +7,13 @@ import pytest
 
 import requests
 
+from beets.util import bytestring_path
 from beetsplug.getlrc import GetLrcPlugin, Stats
 
 
 class Item:
     def __init__(self, path, title='Title', artist='Artist', album='Album', length=120, albumartist=None):
-        self.path = str(path)
+        self.path = bytestring_path(path)
         self.title = title
         self.artist = artist
         self.album = album
@@ -106,11 +107,11 @@ def test_fallback_to_plain_lrc_writes_file(tmp_path):
     result = plugin.fetch_lrc(item, force=False, pretend=False, stats=stats, progress=None, progress_count=None)
 
     # lrc file should be created next to audio
-    lrc_path = plugin._get_lrc_path(item)
+    lrc_path = plugin._get_lrc_path(item, '.txt')
     p = Path(lrc_path.decode() if isinstance(lrc_path, bytes) else str(lrc_path))
     assert p.exists()
     assert p.read_text() == 'plain file content'
-    assert stats.created == 1
+    assert stats.plain == 1
 
 
 def test_http_404_updates_cache_and_stats(tmp_path):

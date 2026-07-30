@@ -152,11 +152,11 @@ class GetLrcPlugin(BeetsPlugin):
             'progress': True,
             'quiet_import': False,
             'output_dir': '',
-            'sidecar_extensions': ['.lrc'],
+            'sidecar_extensions': ['.lrc', '.txt'],
         })
 
         # Populate sidecar extensions from config, ensuring all start with '.'
-        exts = self.config['sidecar_extensions'].get(list) or ['.lrc']
+        exts = self.config['sidecar_extensions'].get(list) or ['.lrc', '.txt']
         self._sidecar_exts = [e if e.startswith('.') else f'.{e}' for e in exts]
 
         if self.config['auto']:
@@ -321,11 +321,11 @@ class GetLrcPlugin(BeetsPlugin):
             # Ignore store errors; caching is best-effort
             pass
 
-    def _get_lrc_path(self, item):
+    def _get_lrc_path(self, item, ext):
         """Determine the .lrc file path, respecting output_dir config."""
         output_template = str(self.config['output_dir']).strip() if self.config['output_dir'] else ''
         if output_template and output_template.lower() != 'none':
-            lrc_basename = os.path.splitext(os.path.basename(displayable_path(item.path)))[0] + '.lrc'
+            lrc_basename = os.path.splitext(os.path.basename(displayable_path(item.path)))[0] + ext
             dir_path = self._expand_output_dir(output_template, item)
             if not os.path.isabs(dir_path):
                 dir_path = os.path.abspath(dir_path)
@@ -339,14 +339,14 @@ class GetLrcPlugin(BeetsPlugin):
             library_dir = bytestring_path(config['directory'].as_filename())
             item_path = os.path.join(library_dir, item_path)
         item_path = os.path.normpath(item_path)
-        return os.path.splitext(item_path)[0] + bytestring_path('.lrc')
+        return os.path.splitext(item_path)[0] + bytestring_path(ext)
 
     def fetch_lrc(self, item, force=False, pretend=False, stats=None, progress=None, progress_count=None, quiet=False):
         try:
-            lrc_path = self._get_lrc_path(item)
-            lrc_path_str = displayable_path(lrc_path)
+            lrc_path = self._get_lrc_path(item, '.lrc')
+            plain_path = self._get_lrc_path(item, '.txt')
 
-            if not force and os.path.exists(syspath(lrc_path)):
+            if not force and (os.path.exists(syspath(lrc_path)) or os.path.exists(syspath(plain_path))):
                 self._log.debug(self._fmt('Skip (exists)', item))
                 self._update_cache(item, 'exists')
                 if stats:
@@ -455,12 +455,12 @@ class GetLrcPlugin(BeetsPlugin):
             # 2. Plain lyrics fallback (write as .lrc file if configured)
             if self.config['fallback_to_plain_lrc'].get(bool) and plain and plain not in (None, 'null', 'None'):
                 try:
-                    with open(syspath(lrc_path), 'w', encoding='utf-8') as f:
+                    with open(syspath(plain_path), 'w', encoding='utf-8') as f:
                         f.write(plain)
                     self._print('Created (plain lyrics)', item, _C.GREEN, progress=progress, progress_count=progress_count)
-                    self._update_cache(item, 'created')
+                    self._update_cache(item, 'plain')
                     if stats:
-                        stats.add('created')
+                        stats.add('plain')
                     return True
                 except OSError as e:
                     self._log.error(self._fmt('Write failed (plain)', item, _C.RED) + f' ({e})')
@@ -572,7 +572,7 @@ class GetLrcPlugin(BeetsPlugin):
 
             exts = getattr(self, '_sidecar_exts', None)
             if exts is None:
-                exts = ['.lrc']
+                exts = ['.lrc', '.txt']
 
             for ext in exts:
                 old = Path(source_path).with_suffix(ext)
@@ -630,7 +630,7 @@ class GetLrcPlugin(BeetsPlugin):
 
             exts = getattr(self, '_sidecar_exts', None)
             if exts is None:
-                exts = ['.lrc']
+                exts = ['.lrc', '.txt']
 
             for ext in exts:
                 for p in src_dir.rglob(f'*{ext}'):

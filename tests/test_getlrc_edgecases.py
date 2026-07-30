@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from beets.util import bytestring_path
 from beetsplug.getlrc import GetLrcPlugin
 
 
@@ -19,10 +20,10 @@ def test_get_lrc_path_uses_audio_dir_for_absolute_path():
         audio.write_text("audio")
 
         item = SimpleNamespace()
-        item.path = str(audio)
+        item.path = bytestring_path(audio)
 
         plugin = GetLrcPlugin()
-        lrc_path = plugin._get_lrc_path(item)
+        lrc_path = plugin._get_lrc_path(item, '.lrc')
         lrc_path_str = lrc_path.decode() if isinstance(lrc_path, bytes) else str(lrc_path)
 
         assert os.path.isabs(lrc_path_str)

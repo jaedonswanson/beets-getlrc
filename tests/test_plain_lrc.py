@@ -39,7 +39,7 @@ class MockItem:
 
 
 def test_fallback_to_plain_lrc():
-    """Verify plain lyrics are written as .lrc when fallback_to_plain_lrc is enabled."""
+    """Verify plain lyrics are written as .txt when fallback_to_plain_lrc is enabled."""
     
     # Create a mock item with path
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -66,9 +66,9 @@ def test_fallback_to_plain_lrc():
             result = plugin.fetch_lrc(item, force=True, quiet=True)
             
             # Should store in DB, not write file
-            lrc_path = os.path.join(tmpdir, 'test_track.lrc')
-            assert not os.path.exists(lrc_path), f'.lrc file should NOT exist when fallback_to_plain_lrc=False, but found: {lrc_path}'
-            print('  ✓ Plain lyrics stored in DB only (no .lrc file)')
+            lrc_path = os.path.join(tmpdir, 'test_track.txt')
+            assert not os.path.exists(lrc_path), f'.txt file should NOT exist when fallback_to_plain_lrc=False, but found: {lrc_path}'
+            print('  ✓ Plain lyrics stored in DB only (no .txt file)')
         
         # Test 2: fallback_to_plain_lrc = True (new feature)
         print('\nTest 2: fallback_to_plain_lrc = True')
@@ -90,25 +90,25 @@ def test_fallback_to_plain_lrc():
             
             result = plugin2.fetch_lrc(item2, force=True, quiet=True)
             
-            # Should write as .lrc file
-            lrc_path2 = os.path.join(tmpdir, 'test_track2.lrc')
-            assert os.path.exists(lrc_path2), f'.lrc file should exist when fallback_to_plain_lrc=True, but not found: {lrc_path2}'
+            # Should write as .txt file
+            lrc_path2 = os.path.join(tmpdir, 'test_track2.txt')
+            assert os.path.exists(lrc_path2), f'.txt file should exist when fallback_to_plain_lrc=True, but not found: {lrc_path2}'
             
             with open(lrc_path2) as f:
                 content = f.read()
-            assert 'This is a test lyric' in content, 'Plain lyrics should be written to .lrc file'
-            print('  ✓ Plain lyrics written as .lrc file')
+            assert 'This is a test lyric' in content, 'Plain lyrics should be written to .txt file'
+            print('  ✓ Plain lyrics written as .txt file')
         
         # Test 3: sidecar_extensions config
         print('\nTest 3: sidecar_extensions config')
         plugin3 = GetLrcPlugin()
-        plugin3.config['sidecar_extensions'] = ['.lrc', '.cue', '.nfo']
+        plugin3.config['sidecar_extensions'] = ['.txt', '.cue', '.nfo']
         # Re-populate from config
-        exts = plugin3.config['sidecar_extensions'].get(list) or ['.lrc']
+        exts = plugin3.config['sidecar_extensions'].get(list) or ['.txt']
         plugin3._sidecar_exts = [e if e.startswith('.') else f'.{e}' for e in exts]
         
-        assert plugin3._sidecar_exts == ['.lrc', '.cue', '.nfo'], \
-            f'Expected [.lrc, .cue, .nfo] but got {plugin3._sidecar_exts}'
+        assert plugin3._sidecar_exts == ['.txt', '.cue', '.nfo'], \
+            f'Expected [.txt, .cue, .nfo] but got {plugin3._sidecar_exts}'
         print('  ✓ sidecar_extensions correctly parsed from config')
         
         print('\n✅ All tests passed!')

@@ -28,6 +28,7 @@ def test_http_error_status_code_extraction():
     mock_item.album = "Test Album"
     mock_item.length = 180
     mock_item.lyrics = None
+    mock_item.path = b''
     mock_item.get = Mock(return_value=None)
     mock_item.__setitem__ = Mock()
     mock_item.store = Mock()
