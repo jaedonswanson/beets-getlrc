@@ -13,7 +13,7 @@ from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from beetsplug.getlrc import GetLrcPlugin, Progress, Stats
+from beetsplug.getlrc.plugin import GetLrcPlugin, Progress, Stats
 
 
 def test_progress_increment():

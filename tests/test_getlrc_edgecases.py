@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from beets.util import bytestring_path
-from beetsplug.getlrc import GetLrcPlugin
+from beetsplug.getlrc.plugin import GetLrcPlugin
 
 
 def test_get_lrc_path_uses_audio_dir_for_absolute_path():

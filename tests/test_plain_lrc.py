@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from beetsplug.getlrc import GetLrcPlugin
+from beetsplug.getlrc.plugin import GetLrcPlugin
 from unittest.mock import Mock, patch
 
 
@@ -51,6 +51,7 @@ def test_fallback_to_plain_lrc():
         # Test 1: fallback_to_plain_lrc = False (default behavior)
         print('Test 1: fallback_to_plain_lrc = False')
         plugin = GetLrcPlugin()
+        plugin.config['search_fallback'] = False
         plugin.config['fallback_to_plain_lrc'] = False
         plugin.config['output_dir'] = tmpdir
         
@@ -73,6 +74,7 @@ def test_fallback_to_plain_lrc():
         # Test 2: fallback_to_plain_lrc = True (new feature)
         print('\nTest 2: fallback_to_plain_lrc = True')
         plugin2 = GetLrcPlugin()
+        plugin2.config['search_fallback'] = False
         plugin2.config['fallback_to_plain_lrc'] = True
         plugin2.config['output_dir'] = tmpdir
         

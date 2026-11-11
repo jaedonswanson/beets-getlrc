@@ -1,4 +1,5 @@
 import os
+import datetime as _dt
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from pathlib import Path
@@ -8,7 +9,7 @@ import pytest
 import requests
 
 from beets.util import bytestring_path
-from beetsplug.getlrc import GetLrcPlugin, Progress, Stats
+from beetsplug.getlrc.plugin import GetLrcPlugin, Progress, Stats
 
 
 class Item:
@@ -67,6 +68,7 @@ def test_cached_skip_respects_recheck(tmp_path):
 
 def test_recheck_window_allows_retry_and_stores_plain(tmp_path):
     plugin = GetLrcPlugin()
+    plugin.config['search_fallback'] = False
     item = Item(tmp_path / 'track2.flac')
     # set old checked time beyond recheck window
     old = datetime.now() - timedelta(days=plugin.config['recheck_days'].get(int) + 1)
@@ -93,6 +95,7 @@ def test_recheck_window_allows_retry_and_stores_plain(tmp_path):
 
 def test_fallback_to_plain_lrc_writes_file(tmp_path):
     plugin = GetLrcPlugin()
+    plugin.config['search_fallback'] = False
     item = Item(tmp_path / 'track3.flac')
 
     def fake_request(url, timeout, retries):
@@ -158,3 +161,62 @@ def test_log_prints_immediately_regardless_of_count_order(capsys):
     out = capsys.readouterr().out
     assert "Task 5" in out
     assert "Task 3" in out
+
+# ---------------------------------------------------------------------------
+# _should_skip_cached: terminal vs negative statuses, recheck window
+
+
+TERMINAL_STATUSES = ['got', 'found', 'exists']
+NEGATIVE_STATUSES = ['no_synced', 'not_found', 'missing', 'timeout', 'plain', 'error']
+
+
+def _make_cached_item(path, status, age_days):
+    item = Item(path)
+    item['getlrc_status'] = status
+    item['getlrc_checked'] = (
+        _dt.datetime.now() - _dt.timedelta(days=age_days)
+    ).isoformat()
+    return item
+
+
+@pytest.mark.parametrize('status', TERMINAL_STATUSES)
+def test_terminal_statuses_are_never_cached_skipped(tmp_path, status):
+    """got/found/exists always re-run; file-existence check owns those."""
+    plugin = GetLrcPlugin()
+    item = _make_cached_item(tmp_path / 'a.flac', status, age_days=0)
+    assert plugin._should_skip_cached(item, force=False) is False
+
+
+@pytest.mark.parametrize('status', NEGATIVE_STATUSES)
+def test_negative_statuses_skip_when_fresh(tmp_path, status):
+    plugin = GetLrcPlugin()
+    item = _make_cached_item(tmp_path / 'b.flac', status, age_days=5)
+    assert plugin._should_skip_cached(item, force=False) is True
+
+
+@pytest.mark.parametrize('status', NEGATIVE_STATUSES)
+def test_negative_statuses_recheck_when_stale(tmp_path, status):
+    recheck_days = GetLrcPlugin().config['recheck_days'].get(int)
+    plugin = GetLrcPlugin()
+    item = _make_cached_item(tmp_path / 'c.flac', status,
+                             age_days=recheck_days + 1)
+    assert plugin._should_skip_cached(item, force=False) is False
+
+
+def test_force_overrides_cached_skip(tmp_path):
+    plugin = GetLrcPlugin()
+    item = _make_cached_item(tmp_path / 'd.flac', 'no_synced', age_days=0)
+    assert plugin._should_skip_cached(item, force=True) is False
+
+
+def test_item_without_cache_state_is_not_skipped(tmp_path):
+    plugin = GetLrcPlugin()
+    assert plugin._should_skip_cached(Item(tmp_path / 'e.flac'), force=False) is False
+
+
+def test_malformed_timestamp_is_not_skipped(tmp_path):
+    plugin = GetLrcPlugin()
+    item = Item(tmp_path / 'f.flac')
+    item['getlrc_status'] = 'no_synced'
+    item['getlrc_checked'] = 'not-a-date'
+    assert plugin._should_skip_cached(item, force=False) is False

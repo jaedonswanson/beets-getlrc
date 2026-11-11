@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Add plugin path to imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from beetsplug.getlrc import GetLrcPlugin, Progress, Stats, _C
+from beetsplug.getlrc.plugin import GetLrcPlugin, Progress, Stats, _C
 
 
 class TestWorkerConcurrency:
