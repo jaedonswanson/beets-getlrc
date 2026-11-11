@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: beets-getlrc
-Version: 0.1.14
+Version: 0.1.16
 Summary: Fetch synced .lrc lyrics from lrclib.net for beets
 License: MIT
 Project-URL: Homepage, https://github.com/jaedonswanson/beets-getlrc
@@ -14,7 +14,7 @@ Requires-Dist: pre-commit; extra == "dev"
 
 # beets-getlrc
 
-A [beets](https://beets.io) plugin that downloads synced `.lrc` lyric files for your music library.
+A [beets](https://beets.io) plugin that downloads synced (and non-synced) `.lrc` lyric files for your music library.
 
 ## Quick Start
 
