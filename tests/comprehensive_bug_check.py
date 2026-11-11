@@ -98,33 +98,6 @@ class TestWorkerConcurrency:
             
             print(f"  {worker_count:3d} workers: {description:40s} {status}")
     
-    @staticmethod
-    def test_progress_pending_queue_growth():
-        """Test if pending queue grows unbounded with out-of-order completions."""
-        print("\n" + "="*60)
-        print("TEST: Progress Pending Queue Growth")
-        print("="*60)
-        
-        progress = Progress(100, use_color=False, enabled=True)
-        
-        # Simulate out-of-order task completions
-        # Complete tasks in reverse order to maximize pending queue
-        completion_order = list(range(100, 0, -1))  # 100, 99, 98, ..., 1
-        
-        for task_num in completion_order:
-            progress.current = task_num - 1  # Directly set to simulate other tasks
-            msg = f"Task {task_num}"
-            progress.log(msg, task_num)
-        
-        max_pending = len(progress._pending)
-        expected_max = 99  # Up to 99 items could be pending
-        
-        status = "✓ PASS" if max_pending < 1000 else "✗ FAIL (unbounded queue)"
-        print(f"  Max pending queue size: {max_pending}/99")
-        print(f"  Status: {status}")
-        
-        return max_pending < 1000
-
 
 class TestSidecarFileMovement:
     """Test sidecar file movement with item and album moves."""

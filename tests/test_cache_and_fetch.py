@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from beets.util import bytestring_path
-from beetsplug.getlrc import GetLrcPlugin, Stats
+from beetsplug.getlrc import GetLrcPlugin, Progress, Stats
 
 
 class Item:
@@ -136,3 +136,25 @@ def test_http_404_updates_cache_and_stats(tmp_path):
     # _update_cache prefers mapping set; item supports mapping
     assert item.get('getlrc_status') == 'not_found' or getattr(item, 'getlrc_status', None) == 'not_found'
     assert stats.not_found == 1
+
+def test_log_prints_immediately_regardless_of_count_order(capsys):
+    """Regression: per-track output must not stall on skipped/out-of-order counts.
+
+    Items consume a sequence count on increment whether or not they ever
+    print (existing .lrc skips, cache hits). The old ordered buffer waited
+    forever on those silent counts, so nothing after the first skip ever
+    printed. Immediate printing must not depend on arrival order.
+    """
+    progress = Progress(100, use_color=False, enabled=True)
+
+    # counts 1-2 consumed silently by skipped items (no log call)
+    progress.increment()
+    progress.increment()
+
+    # out-of-order completions
+    progress.log("Task 5", 5)
+    progress.log("Task 3", 3)
+
+    out = capsys.readouterr().out
+    assert "Task 5" in out
+    assert "Task 3" in out

@@ -78,8 +78,6 @@ class Progress:
         self.enabled = enabled
         self.use_color = use_color
         self._lock = threading.Lock()
-        self._next_print = 1
-        self._pending = {}
         self._start_time = time.monotonic()
 
     def increment(self):
@@ -111,19 +109,7 @@ class Progress:
         return f"{c.BOLD}[{current:04d}/{total:04d}] [{bar}] {percent:3d}% {self._format_elapsed(elapsed)}{c.RESET} "
 
     def log(self, message, count=None):
-        if not self.enabled or count is None:
-            print(message, flush=True)
-            return
-
-        with self._lock:
-            if count == self._next_print:
-                print(message, flush=True)
-                self._next_print += 1
-                while self._next_print in self._pending:
-                    print(self._pending.pop(self._next_print), flush=True)
-                    self._next_print += 1
-            else:
-                self._pending[count] = message
+        print(message, flush=True)
 
     def finish(self):
         if self.enabled:
@@ -687,9 +673,6 @@ class GetLrcPlugin(BeetsPlugin):
                                  progress_count=count, quiet=quiet)
                     time.sleep(delay)
                 except Exception as e:
-                    # Ensure progress counter is incremented even on error
-                    if progress:
-                        progress.increment()
                     self._log.error(f"Error processing {displayable_path(item.path)}: {e}")
                     # If stats tracking, increment error count
                     if stats:
@@ -713,8 +696,6 @@ class GetLrcPlugin(BeetsPlugin):
                     time.sleep(delay)
                 except Exception as e:
                     self._log.error(f"Error processing {displayable_path(item.path)}: {e}")
-                    if progress:
-                        progress.increment()
                     # If stats tracking, increment error count
                     if stats:
                         stats.add('errors')
